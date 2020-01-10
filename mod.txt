@@ -1,0 +1,20 @@
+{
+	"name": "AutoCooker",
+	"description": "Let the meth cook by itself",
+	"author": "Uziel2021/_atom",
+	"contact": "https://steamcommunity.com/id/mbien1981/",
+	"version": "2.0",
+	"blt_version": 2,
+	"priority": 100,
+	"keybinds": [
+		{
+			"keybind_id": "__autocooker",
+			"name": "AutoCooker Toggle",
+			"description": "Toggle on/off auto cooker",
+			"script_path": "AutoCooker.lua",
+			"run_in_menu": false,
+			"run_in_game": true,
+			"localized": false
+		}, 
+	]
+}

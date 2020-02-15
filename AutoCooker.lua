@@ -6,8 +6,12 @@ if not rawget(_G, "AutoCooker") then
 	end
 
 	function AutoCooker:Helper(text)
-		if self.helper then
-			self:message(text, "Helper")
+		if self.helper.enabled then
+			if self.helper.synced then
+				managers.chat:send_message( 1, managers.network:session():local_peer(), text )
+			else
+				self:message(text, "Helper")
+			end
 		end
 	end
 
@@ -15,7 +19,17 @@ if not rawget(_G, "AutoCooker") then
 		return Network:is_server()
 	end
 
-	function AutoCooker:cook_meth(chemical)
+	function AutoCooker:take_meth(Vector)
+		if self.toggle then
+			local Vector = Vector or managers.player:player_unit():camera():position()
+			self:drop_current_bag(Vector)
+			self:interact(self.interactions[4])
+			self:drop_current_bag(Vector)
+			self.current_cooking_phase = 1
+		end
+	end
+
+	function AutoCooker:interact(interaction_name)
 		local can_interact = function()
 			return true
 		end
@@ -27,73 +41,122 @@ if not rawget(_G, "AutoCooker") then
 		local player = managers.player:player_unit()
 		if alive(player) then
 			local interaction
-			if type(chemical) == 'string' then
+			if type(interaction_name) == 'string' then
 				for _, unit in pairs(managers.interaction._interactive_units) do
-					interaction = unit:interaction()
-					if interaction.tweak_data == chemical then
+					interaction = unit and unit:interaction()
+					if interaction.tweak_data == interaction_name then
+						interaction.can_interact = can_interact
+						interaction:interact(player)
 						break
 					end
 				end
 			end
-			interaction.can_interact = can_interact
-			interaction:interact(player)
 		end
 	end
 
 	function AutoCooker:toggle_autocooker()
 		self.toggle = not self.toggle
-		self:message(tostring(self.toggle), "Autocooker")
+		self:message(tostring(self.toggle), "AutoCooker")
+	end
+
+	function AutoCooker:check_meth() -- Check if meth there is meth to take or if the lab is active, then peform the interaction
+		for _, tracked_interaction in pairs({"methlab_bubbling", "taking_meth"}) do 
+			local interaction
+			for _, unit in pairs(managers.interaction._interactive_units) do
+				interaction = unit:interaction()
+				if interaction.tweak_data == tracked_interaction then
+					if self.current_cooking_phase ~= 4 then
+						self:interact(self.interactions[self.current_cooking_phase])
+						self.current_cooking_phase = self.current_cooking_phase + 1
+					end
+					break
+				end
+			end
+		end
+	end
+
+	function AutoCooker:drop_current_bag(pos)
+		local carry_data = managers.player:get_my_carry_data()
+		local rotation = managers.player:player_unit():camera():rotation()
+		local position = pos or managers.player:player_unit():camera():position() -- local position = Vector3(5700, -10625, 100)
+		local forward = managers.player:player_unit():camera():forward()
+		if carry_data then
+			if Network:is_server() then
+				managers.player:server_drop_carry(carry_data.carry_id, carry_data.multiplier, carry_data.dye_initiated, carry_data.has_dye_pack, carry_data.dye_value_multiplier, position, rotation, forward, 1, nil, managers.network:session():local_peer())
+			else
+				managers.network:session():send_to_host("server_drop_carry", carry_data.carry_id, carry_data.multiplier, carry_data.dye_initiated, carry_data.has_dye_pack, carry_data.dye_value_multiplier, position, rotation, forward, 1, nil)
+			end
+			managers.hud:remove_teammate_carry_info( HUDManager.PLAYER_PANEL )
+			managers.hud:temp_hide_carry_bag()
+			managers.hud:remove_special_equipment("carrystacker")
+			managers.player:update_removed_synced_carry_to_peers()
+			managers.player:set_player_state("standard")
+		end
 	end
 
 	-- cooker
 	local dialog_backup = DialogManager.queue_dialog
 	function DialogManager:queue_dialog(id, params)
 		dialog_backup(self, id, params)
+
+		-- Cook Off, Border Cristals
 		if id == 'pln_rt1_20' or id == "Play_loc_mex_cook_03" then
 			AutoCooker:Helper("Muriatic Acid")
-			AutoCooker:cook_meth(AutoCooker.chems[1])
+			AutoCooker:interact(AutoCooker.interactions[1])
 		elseif id == 'pln_rt1_22' or id == "Play_loc_mex_cook_04" then
 			AutoCooker:Helper("Caustic Soda")
-			AutoCooker:cook_meth(AutoCooker.chems[2])
+			AutoCooker:interact(AutoCooker.interactions[2])
 		elseif id == 'pln_rt1_24' or id == "Play_loc_mex_cook_05" then
 			AutoCooker:Helper("Hydrogen Chloride")
-			AutoCooker:cook_meth(AutoCooker.chems[3])
+			AutoCooker:interact(AutoCooker.interactions[3])
 		end
+
 	end
 
-	function PlayerManager:verify_carry(peer, carry_id) return true end
-	function NetworkPeer:verify_bag(carry_id, pickup) return true end
+	function AutoCooker:give_chems()
+		self:interact("muriatic_acid")
+		self:interact("caustic_soda")
+		self:interact("hydrogen_chloride")
+	end
 
-	local unit_backup = ObjectInteractionManager.add_unit
+	local orig_unit = ObjectInteractionManager.add_unit
 	function ObjectInteractionManager:add_unit(unit)
-		unit_backup(self, unit)
-		managers.enemy:add_delayed_clbk("launchmeth", function()
-			if alive(managers.player:player_unit()) then
-				local interaction = alive(unit) and unit:interaction()
-				local random = math.random
-				if interaction and interaction.tweak_data == 'taking_meth' then
-					AutoCooker:Helper("Meth bag is done.")
-
-					if not AutoCooker.meth_pos then
-						local pos = interaction:interact_position()
-						AutoCooker.meth_pos = Vector3(pos.x, pos.y, pos.z + 10)
-					end
-					
-					if AutoCooker.toggle and AutoCooker:is_server() then
-						interaction:interact(managers.player:player_unit())
-						managers.player:clear_carry()
-						managers.player:server_drop_carry('meth', 1, false, false, 1, AutoCooker.meth_pos, Vector3(random(-180, 180), random(-180, 180), 0), Vector3(0, 0, 1), 100, nil)
-					end
+		orig_unit(self, unit)
+		local interaction = unit and unit:interaction()
+		if interaction and interaction.tweak_data == 'taking_meth' then
+			local pos = interaction:interact_position()
+			local position = Vector3(pos.x + (-50 or 0), pos.y, pos.z + 10)
+			BetterDelayedCalls:Add("pick_meth_bag", 1.2, function()
+				if rawget(_G, "AutoCooker") then	
+					AutoCooker:take_meth(position)
+					AutoCooker:give_chems()
 				end
-			end
-		end, Application:time() + 0.4)
+			end)
+		end
 	end
 
 	function AutoCooker:init()
 		self.toggle = true
-		self.helper = false -- "meth helper"
-		self.chems = {'methlab_bubbling', 'methlab_caustic_cooler', 'methlab_gas_to_salt'}
-		self.meth_pos = nil
+		self.helper = { enabled = false, synced = false } -- "meth helper"
+		self.interactions = {'methlab_bubbling', 'methlab_caustic_cooler', 'methlab_gas_to_salt', "taking_meth"}
+		self.level = Global.level_data.level_id
+		self.current_cooking_phase = 1 -- miami and dockyard
+		self:give_chems()
+
+		if self.level == "crojob2" or self.level == "mia_1" then
+			BetterDelayedCalls:Add("auto_check_meth", 1.5, function() 
+				if rawget(_G, "AutoCooker") then
+					self:check_meth() 
+				end
+			end, true)
+		elseif self.level == "rat" then
+			BetterDelayedCalls:Add("enable_circuit_boxes", 1.5, function() 
+				if rawget(_G, "AutoCooker") then
+					self:interact("circuit_breaker")
+					self:interact("place_flare")
+				end
+			end, true)
+		end
 
 		self:message("Initialized","AutoCooker")
 	end

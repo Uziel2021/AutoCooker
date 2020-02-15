@@ -1,26 +1,27 @@
 {
-	"name": "AutoCooker",
-	"description": "Let the meth cook by itself",
-	"author": "Uziel2021/_atom",
-	"contact": "https://steamcommunity.com/id/mbien1981/",
-	"version": "3.0",
-	"blt_version": 2,
-	"priority": 100,
-	"hooks": [
-		{
-			"hook" : "lib/managers/menumanager",
-			"script_path" : "delayedcalls.lua"
-		}
-	],
-	"keybinds": [
-		{
-			"keybind_id": "__autocooker",
-			"name": "AutoCooker Toggle",
-			"description": "Toggle on/off auto cooker",
-			"script_path": "AutoCooker.lua",
-			"run_in_menu": false,
-			"run_in_game": true,
-			"localized": false
-		}, 
-	]
+    "name": "AutoCooker",
+    "description": "Let the meth cook by itself.",
+    "author": "Uziel2021/_atom",
+    "contact": "https://www.unknowncheats.me/forum/members/1077012.html",
+    "version": "3.0",
+    "blt_version": 2,
+    "priority": 100,
+    "hooks": [
+
+        {
+            "hook_id": "lib/managers/menumanager",
+            "script_path": "delayedcalls.lua"
+        }
+    ],
+    "keybinds": [
+        {
+            "keybind_id": "___autocooker",
+            "name": "Toggle AutoCooker",
+            "description": "-",
+            "script_path": "autocooker.lua",
+            "run_in_menu": true,
+            "run_in_game": true,
+            "localized": false
+        }
+    ]
 }
